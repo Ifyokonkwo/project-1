@@ -107,14 +107,24 @@ resource "aws_route_table" "private_rt" {
 
 
 # create public route-table association
-resource "aws_route_table_association" "public_rt_assc" {
+resource "aws_route_table_association" "public_rt_assc1" {
   subnet_id      = aws_subnet.pub_sbn1.id
   route_table_id = aws_route_table.public_rt.id
 }
 
+resource "aws_route_table_association" "public_rt_assc2" {
+  subnet_id      = aws_subnet.pub_sbn2.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
 # create private route-table association
-resource "aws_route_table_association" "priv_rt_assc" {
+resource "aws_route_table_association" "priv_rt_assc1" {
   subnet_id      = aws_subnet.priv_sbn1.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+resource "aws_route_table_association" "priv_rt_assc2" {
+  subnet_id      = aws_subnet.priv_sbn2.id
   route_table_id = aws_route_table.private_rt.id
 }
 
@@ -200,8 +210,96 @@ resource "local_file" "key" {
  file_permission = "400"
 }
 
-# create public jey
+# create public key
 resource "aws_key_pair" "key" {
   key_name = "proj-pub-key"
   public_key = tls_private_key.key.public_key_openssh
 }
+
+# create s3 media bucket
+resource "aws_s3_bucket" "media_bucket" {
+  bucket = "proj-media-bucket-2034" # bucket name has to be unqiue and hasnt been used before
+
+  tags = {
+    Name        = "media_bucket"
+    Environment = "prod"
+  }
+}
+
+# Allow public access control
+# This is REQUIRED for public access to work.
+resource "aws_s3_bucket_public_access_block" "media_bucket" {
+  bucket = aws_s3_bucket.media_bucket.id
+
+  block_public_acls       = false # Prevents making objects public via ACLs (Access Control Lists are outdated and messy)
+  block_public_policy     = false # we need to make bucket public via policy 
+  ignore_public_acls      = false # ignore if trying to set a public ACL, good security practice.
+  restrict_public_buckets = false # does not restrict public policies
+}
+
+# Media Bucket policy
+resource "aws_s3_bucket_policy" "media_bucket_policy" {
+  bucket = aws_s3_bucket.media_bucket.id
+  policy = data.aws_iam_policy_document.media_bucket_policy.json
+}
+
+data "aws_iam_policy_document" "media_bucket_policy" {
+ 
+  statement {
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+    actions = [
+      "s3:*"
+  
+    ]
+    resources = [
+      aws_s3_bucket.media_bucket.arn,
+      "${aws_s3_bucket.media_bucket.arn}/*"
+    ]
+  }
+}
+
+#creating S3 log bucket
+resource "aws_s3_bucket" "proj_log_bucket" {
+  bucket = "proj-logs-bucket-2026" # bucket name has to be unqiue and hasnt been used before
+
+  tags = {
+    Name        = "proj_log_bucket"
+    Environment = "prod"
+  }
+} 
+
+# Block public access control
+# This is REQUIRED for public access to work.
+resource "aws_s3_bucket_public_access_block" "proj-log-bucket" {
+  bucket = aws_s3_bucket.proj_log_bucket.id
+
+  block_public_acls       = true 
+  block_public_policy     = true 
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# creating code bucket
+resource "aws_s3_bucket" "proj_code_bucket" {
+    bucket = "proj-code-bucket-1234"
+
+    tags = {
+      Name = "proj-code-bucket"
+      Environment = "prod"
+    }
+}
+
+# Block all public access
+
+resource "aws_s3_bucket_public_access_block" "public_access" {
+  bucket = aws_s3_bucket.proj_code_bucket.id
+
+  block_public_acls   = true
+  block_public_policy = true
+  ignore_public_acls  = true
+  restrict_public_buckets = true
+}
+
